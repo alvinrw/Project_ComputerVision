@@ -1,0 +1,32 @@
+name: comvis_app
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+    
+  # Package untuk fungsionalitas aplikasi
+  camera: ^0.10.5+9
+  google_mlkit_face_detection: ^0.11.0
+  image: ^4.1.3
+  web_socket_channel: ^3.0.3
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  
+  flutter_lints: ^5.0.0
+
+# Bagian konfigurasi spesifik untuk Flutter
+flutter:
+  uses-material-design: true
+
+  # Daftarkan folder assets di sini
+  assets:
+    - assets/main/
