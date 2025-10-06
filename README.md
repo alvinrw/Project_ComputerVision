@@ -1,40 +1,55 @@
-# Project_ComputerVision
-Sistem Computer Vision untuk mendeteksi gerakan kepala dan mengontrol LED melalui ESP32 menggunakan Google ML Kit dan WebSocket.
+# Project Computer Vision: Kontrol LED dengan Gerakan Kepala
 
-## Tentang Proyek
-Proyek ini menggabungkan Computer Vision dan IoT untuk mendeteksi pergerakan kepala dan mentransformasi gerakan tersebut menjadi kontrol LED di ESP32 secara real-time.
+Sistem Computer Vision untuk mendeteksi gerakan kepala secara real-time dan menggunakannya untuk mengontrol lampu LED melalui ESP32, dihubungkan dengan WebSocket.
+
+---
+
+## 🎯 Tentang Proyek
+Proyek ini menggabungkan Computer Vision dan IoT untuk menciptakan interaksi fisik dari gerakan digital. Aplikasi Flutter mendeteksi gerakan kepala menggunakan Google ML Kit, mengirim data ke server Python, yang kemudian memerintahkan ESP32 untuk menyalakan LED yang sesuai.
 
 **Alur utama:**
-1.  Kamera menangkap gerakan kepala.
-2.  Proses menggunakan Google ML Kit di Aplikasi Flutter.
-3.  Data gerakan dikirim via WebSocket ke backend Python.
-4.  Backend mengirim sinyal ke firmware ESP32.
-5.  ESP32 menyalakan LED sesuai pergerakan.
-
-**Tujuan proyek:**
-* Belajar integrasi Computer Vision, Machine Learning, dan IoT.
-* Membuat visualisasi pergerakan kepala ke output fisik (LED).
-* Membangun sistem real-time yang berjalan di berbagai platform (Aplikasi, PC, dan ESP32).
+1.  **Aplikasi Flutter**: Menggunakan kamera untuk menangkap video dan mendeteksi gerakan kepala (atas, bawah, kiri, kanan) dengan Google ML Kit.
+2.  **WebSocket Client**: Aplikasi mengirimkan sinyal gerakan (`"UP"`, `"DOWN"`, dll.) ke server melalui WebSocket.
+3.  **Server Python**: Berperan sebagai jembatan, menerima sinyal dari aplikasi dan meneruskannya ke ESP32.
+4.  **ESP32**: Menerima perintah dari server dan menyalakan LED yang telah diprogram sesuai arah gerakan.
 
 ---
 
-## Fitur ✨
-- Deteksi pergerakan kepala (atas, bawah, kiri, kanan) menggunakan kamera.
-- Transformasi data gerakan menjadi sinyal kontrol untuk LED.
-- Kontrol ESP32 secara nirkabel dan real-time menggunakan WebSocket.
-- Dukungan skrip pengujian di laptop sebelum di-deploy ke perangkat fisik.
-- Menggunakan Google ML Kit untuk deteksi wajah dan gerakan yang efisien.
+## ✨ Fitur
+-   **Deteksi Real-Time**: Mendeteksi gerakan kepala dengan latensi rendah.
+-   **Kontrol Nirkabel**: Menggunakan Wi-Fi untuk komunikasi antara semua komponen.
+-   **Multi-Platform**: Aplikasi berjalan di Android/iOS, server di PC, dan firmware di mikrokontroler.
+-   **Visualisasi Fisik**: Memberikan output nyata (cahaya LED) dari input digital (gerakan kepala).
+-   **Efisien**: Memanfaatkan Google ML Kit yang dioptimalkan untuk perangkat mobile.
 
 ---
 
-## Spesifikasi Teknis 🛠️
-* **Hardware**: ESP32, beberapa buah LED, dan kamera (webcam laptop atau ponsel).
-* **Aplikasi Mobile**: Flutter (Dart) untuk antarmuka pengguna dan pengiriman data.
-* **Backend Server**: Python dengan library `websockets`.
-* **Firmware**: C++ (Arduino) untuk ESP32.
+## 🛠️ Spesifikasi Teknis
+* **Hardware**: ESP32, LED, Resistor, Project Board, dan Kamera (Ponsel/Webcam).
+* **Aplikasi Mobile**: Flutter (Dart).
+* **Backend Server**: Python.
+* **Firmware**: C++ (Arduino Framework).
 * **AI/ML Model**: Google ML Kit (Face Detection).
-* **Protokol Jaringan**: WebSocket melalui jaringan Wi-Fi 2.4 GHz.
+* **Protokol Komunikasi**: WebSocket.
 
 ---
 
+## 🚀 Persiapan dan Instalasi
+
+### 1. Clone Repository
+```bash
+git clone [https://github.com/alvinrw/Project_ComputerVision.git](https://github.com/alvinrw/Project_ComputerVision.git)
+cd Project_ComputerVision
+```
+
+2. Instalasi Dependensi
+A. Python
+```bash
+pip install -r requirements.txt
+```
+
+B. Flutter
+```bash
+flutter pub get
+```
 
