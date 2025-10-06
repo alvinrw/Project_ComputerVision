@@ -15,15 +15,12 @@ class CameraScreen extends StatefulWidget {
   State<CameraScreen> createState() => _CameraScreenState();
 }
 
-// Variabel dan fungsi yang sebelumnya di sini, dipindahkan ke dalam _CameraScreenState
-
 class _CameraScreenState extends State<CameraScreen> {
   // --- KONFIGURASI ---
   static const int SMOOTHING_FRAMES = 7;
   static const int DEADZONE_THRESHOLD = 4;
 
   // --- Variabel WebSocket ---
-  // <<< PINDAHKAN KE SINI
   late WebSocketChannel _channel;
   bool _isConnected = false;
 
@@ -32,8 +29,6 @@ class _CameraScreenState extends State<CameraScreen> {
   bool _isCameraInitialized = false;
   late FaceDetector _faceDetector;
   bool _isProcessing = false;
-
-  // Variabel untuk menyimpan index kamera yang dipilih
   late int _selectedCameraIndex;
 
   // --- Variabel Kalibrasi ---
@@ -50,13 +45,15 @@ class _CameraScreenState extends State<CameraScreen> {
   int _turnLeftPercent = 0;
   int _nodUpPercent = 0;
   int _nodDownPercent = 0;
-  String _status = "Posisikan wajah & tekan tombol kalibrasi";
+  String _status = "Hubungkan WiFi ke ESP & tekan tombol kalibrasi";
 
-  // <<< PINDAHKAN FUNGSI KE SINI
   void _connectToESP() {
     try {
-     
-      final wsUrl = Uri.parse('ws://192.168.43.52:81');
+      // ==========================================================
+      // ===          PERUBAHAN HANYA DI ALAMAT IP INI          ===
+      // ==========================================================
+      final wsUrl = Uri.parse('ws://192.168.4.1:81');
+
       _channel = WebSocketChannel.connect(wsUrl);
 
       // Tunggu koneksi berhasil
@@ -86,7 +83,7 @@ class _CameraScreenState extends State<CameraScreen> {
     } catch (e) {
       debugPrint("Error saat koneksi: $e");
       setState(() {
-        _status = "IP ESP salah atau tidak terjangkau";
+        _status = "Pastikan WiFi HP sudah terhubung ke ESP";
       });
     }
   }
@@ -111,7 +108,6 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   void _initializeCamera(int cameraIndex) {
-    // ... (tidak ada perubahan di sini)
     final camera = widget.cameras[cameraIndex];
 
     _cameraController = CameraController(
@@ -135,7 +131,6 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   Future<void> _switchCamera() async {
-    // ... (tidak ada perubahan di sini)
     if (widget.cameras.length < 2) return; 
 
     setState(() {
@@ -152,8 +147,8 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   void _startCalibration() {
-    // <<< PANGGIL FUNGSI KONEKSI DI SINI
-    _connectToESP(); // Coba hubungkan ke ESP saat kalibrasi
+    // Panggil fungsi koneksi
+    _connectToESP(); 
 
     setState(() {
       _isCalibrated = true;
@@ -174,10 +169,9 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   void _resetCalibration() {
-    // ... (tidak ada perubahan di sini)
     setState(() {
       _isCalibrated = false;
-      _status = "Posisikan wajah & tekan tombol kalibrasi";
+      _status = "Hubungkan WiFi ke ESP & tekan tombol kalibrasi";
       _turnRightPercent = 0;
       _turnLeftPercent = 0;
       _nodUpPercent = 0;
@@ -194,7 +188,6 @@ class _CameraScreenState extends State<CameraScreen> {
     _isProcessing = true;
 
     try {
-      // ... (tidak ada perubahan di bagian konversi gambar)
       final WriteBuffer allBytes = WriteBuffer();
       for (final Plane plane in image.planes) {
         allBytes.putUint8List(plane.bytes);
@@ -218,7 +211,7 @@ class _CameraScreenState extends State<CameraScreen> {
             bytesPerRow: image.planes[0].bytesPerRow,
         );
       } else {
-         metadata = InputImageMetadata(
+          metadata = InputImageMetadata(
             size: imageSize,
             rotation: imageRotation,
             format: inputImageFormat,
@@ -236,7 +229,6 @@ class _CameraScreenState extends State<CameraScreen> {
         final FaceLandmark? rightEye = face.landmarks[FaceLandmarkType.rightEye];
 
         if (nose != null && leftEye != null && rightEye != null && _isCalibrated) {
-          // ... (tidak ada perubahan di kalkulasi persentase)
           final currentNosePos = Point(nose.position.x.toDouble(), nose.position.y.toDouble());
           final eyeCenterX = (leftEye.position.x + rightEye.position.x) / 2;
           final faceBox = face.boundingBox;
@@ -273,7 +265,7 @@ class _CameraScreenState extends State<CameraScreen> {
           _nodUpPercent = smoothUp > DEADZONE_THRESHOLD ? smoothUp : 0;
           _nodDownPercent = smoothDown > DEADZONE_THRESHOLD ? smoothDown : 0;
 
-          // <<< TAMBAHKAN INI: Kirim data ke ESP jika terhubung
+          // Kirim data ke ESP jika terhubung
           if (_isConnected) {
             String dataToSend = 
               '{"kanan": $_turnRightPercent, "kiri": $_turnLeftPercent, "atas": $_nodUpPercent, "bawah": $_nodDownPercent}';
@@ -283,7 +275,6 @@ class _CameraScreenState extends State<CameraScreen> {
           setState(() {});
         }
       } else if (mounted) {
-        // ... (tidak ada perubahan di sini)
         setState(() {
           _status = _isCalibrated ? "Wajah tidak terdeteksi" : "Posisikan wajah di dalam area";
         });
@@ -297,7 +288,6 @@ class _CameraScreenState extends State<CameraScreen> {
 
   @override
   void dispose() {
-    // <<< TAMBAHKAN INI: Tutup koneksi saat widget dihancurkan
     if (_isConnected) {
       _channel.sink.close();
     }
@@ -309,7 +299,6 @@ class _CameraScreenState extends State<CameraScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Tampilan bisa disesuaikan untuk menunjukkan status koneksi
     Color statusColor = Colors.blue.withOpacity(0.8);
     if (_isCalibrated && _isConnected) {
       statusColor = Colors.green.withOpacity(0.8);
@@ -319,7 +308,6 @@ class _CameraScreenState extends State<CameraScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        // <<< TAMBAHKAN INI: Indikator status koneksi di AppBar
         title: Text(_isConnected ? "Tersambung" : "Tidak Tersambung"),
         actions: [
           IconButton(
@@ -347,7 +335,7 @@ class _CameraScreenState extends State<CameraScreen> {
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: statusColor, // <<< Gunakan warna status dinamis
+                        color: statusColor, 
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Text(
@@ -362,7 +350,6 @@ class _CameraScreenState extends State<CameraScreen> {
                   ),
                 if (_isCalibrated)
                   Positioned(
-                    // ... (tidak ada perubahan di sini)
                     bottom: 20,
                     left: 20,
                     right: 20,
@@ -395,12 +382,12 @@ class _CameraScreenState extends State<CameraScreen> {
               ],
             )
           : const Center(child: CircularProgressIndicator()),
-      floatingActionButton: FloatingActionButton.extended( // Tombol selalu ada
-              onPressed: _isCalibrated ? _resetCalibration : _startCalibration,
-              label: Text(_isCalibrated ? 'Reset' : 'Kalibrasi & Sambungkan'),
-              icon: Icon(_isCalibrated ? Icons.refresh : Icons.sensors),
-              backgroundColor: _isCalibrated ? Colors.red : Theme.of(context).primaryColor,
-            ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _isCalibrated ? _resetCalibration : _startCalibration,
+        label: Text(_isCalibrated ? 'Reset' : 'Kalibrasi & Sambungkan'),
+        icon: Icon(_isCalibrated ? Icons.refresh : Icons.sensors),
+        backgroundColor: _isCalibrated ? Colors.red : Theme.of(context).primaryColor,
+      ),
     );
   }
 }
