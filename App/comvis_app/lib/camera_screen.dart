@@ -19,6 +19,9 @@ class _CameraScreenState extends State<CameraScreen> {
   // --- KONFIGURASI ---
   static const int SMOOTHING_FRAMES = 7;
   static const int DEADZONE_THRESHOLD = 4;
+  static const double MAX_YAW_DEGREE = 35.0; 
+  static const double VERTICAL_SCALE_FACTOR = 0.25;
+  static const int CALIBRATION_FRAMES = 10; // Jumlah frame untuk kalibrasi
 
   // --- Variabel WebSocket ---
   late WebSocketChannel _channel;
@@ -33,6 +36,16 @@ class _CameraScreenState extends State<CameraScreen> {
 
   // --- Variabel Kalibrasi ---
   bool _isCalibrated = false;
+  bool _isCalibrating = false; // Status sedang kalibrasi
+  int _calibrationFrameCount = 0;
+  
+  // NILAI REFERENSI KALIBRASI (posisi netral user)
+  double _calibratedYaw = 0.0;
+  double _calibratedNoseY = 0.0;
+  
+  // Untuk mengumpulkan data saat kalibrasi
+  final List<double> _calibrationYawSamples = [];
+  final List<double> _calibrationNoseYSamples = [];
 
   // --- Variabel untuk Smoothing ---
   final Queue<int> _rightHistory = Queue<int>();
@@ -46,28 +59,22 @@ class _CameraScreenState extends State<CameraScreen> {
   int _nodUpPercent = 0;
   int _nodDownPercent = 0;
   String _status = "Hubungkan WiFi ke ESP & tekan tombol kalibrasi";
+  int _processingTimeMs = 0;
 
   void _connectToESP() {
     try {
-      // ==========================================================
-      // ===          PERUBAHAN HANYA DI ALAMAT IP INI          ===
-      // ==========================================================
       final wsUrl = Uri.parse('ws://192.168.4.1:81');
-
       _channel = WebSocketChannel.connect(wsUrl);
 
-      // Tunggu koneksi berhasil
       _channel.ready.then((_) {
         setState(() {
           _isConnected = true;
-          _status = "Terhubung ke ESP! Kalibrasi selesai!";
+          _status = "Terhubung ke ESP! Siap digunakan!";
         });
         
-        // Listener untuk pesan dari ESP
         _channel.stream.listen((message) {
           debugPrint('Pesan dari ESP: $message');
         }, onDone: () {
-          // Koneksi ditutup
           setState(() {
             _isConnected = false;
             _status = "Koneksi ke ESP terputus";
@@ -147,30 +154,58 @@ class _CameraScreenState extends State<CameraScreen> {
   }
 
   void _startCalibration() {
-    // Panggil fungsi koneksi
     _connectToESP(); 
 
     setState(() {
-      _isCalibrated = true;
-      _status = "Mencoba terhubung & kalibrasi...";
+      _isCalibrating = true; // Mulai proses kalibrasi
+      _isCalibrated = false;
+      _calibrationFrameCount = 0;
+      _calibrationYawSamples.clear();
+      _calibrationNoseYSamples.clear();
+      _status = "Kalibrasi... Tahan posisi kepala netral!";
       _rightHistory.clear();
       _leftHistory.clear();
       _upHistory.clear();
       _downHistory.clear();
     });
+  }
 
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted && _isConnected) {
-        setState(() {
-          _status = "";
-        });
-      }
-    });
+  void _finishCalibration() {
+    // Hitung rata-rata dari sample kalibrasi
+    if (_calibrationYawSamples.isNotEmpty && _calibrationNoseYSamples.isNotEmpty) {
+      _calibratedYaw = _calibrationYawSamples.reduce((a, b) => a + b) / _calibrationYawSamples.length;
+      _calibratedNoseY = _calibrationNoseYSamples.reduce((a, b) => a + b) / _calibrationNoseYSamples.length;
+      
+      setState(() {
+        _isCalibrating = false;
+        _isCalibrated = true;
+        _status = "Kalibrasi selesai! Silakan gunakan";
+      });
+
+      // Clear status setelah 2 detik
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && _isCalibrated) {
+          setState(() {
+            _status = "";
+          });
+        }
+      });
+    } else {
+      setState(() {
+        _isCalibrating = false;
+        _status = "Kalibrasi gagal! Wajah tidak terdeteksi";
+      });
+    }
   }
 
   void _resetCalibration() {
     setState(() {
       _isCalibrated = false;
+      _isCalibrating = false;
+      _calibratedYaw = 0.0;
+      _calibratedNoseY = 0.0;
+      _calibrationYawSamples.clear();
+      _calibrationNoseYSamples.clear();
       _status = "Hubungkan WiFi ke ESP & tekan tombol kalibrasi";
       _turnRightPercent = 0;
       _turnLeftPercent = 0;
@@ -186,6 +221,8 @@ class _CameraScreenState extends State<CameraScreen> {
   void _processCameraImage(CameraImage image) async {
     if (_isProcessing || !mounted) return;
     _isProcessing = true;
+
+    final stopwatch = Stopwatch()..start(); 
 
     try {
       final WriteBuffer allBytes = WriteBuffer();
@@ -222,65 +259,103 @@ class _CameraScreenState extends State<CameraScreen> {
       final inputImage = InputImage.fromBytes(bytes: bytes, metadata: metadata);
       final List<Face> faces = await _faceDetector.processImage(inputImage);
 
+      stopwatch.stop(); 
+      _processingTimeMs = stopwatch.elapsedMilliseconds; 
+
       if (mounted && faces.isNotEmpty) {
         final Face face = faces.first;
         final FaceLandmark? nose = face.landmarks[FaceLandmarkType.noseBase];
-        final FaceLandmark? leftEye = face.landmarks[FaceLandmarkType.leftEye];
-        final FaceLandmark? rightEye = face.landmarks[FaceLandmarkType.rightEye];
 
-        if (nose != null && leftEye != null && rightEye != null && _isCalibrated) {
+        if (nose != null) {
+          final double yawAngle = face.headEulerAngleZ ?? 0.0;
           final currentNosePos = Point(nose.position.x.toDouble(), nose.position.y.toDouble());
-          final eyeCenterX = (leftEye.position.x + rightEye.position.x) / 2;
           final faceBox = face.boundingBox;
           final faceCenterY = faceBox.center.dy;
-
-          final double dx = eyeCenterX - currentNosePos.x;
           final double dy = currentNosePos.y - faceCenterY;
 
-          final screenWidth = image.width.toDouble();
-          final screenHeight = image.height.toDouble();
+          // === MODE KALIBRASI: Kumpulkan data ===
+          if (_isCalibrating) {
+            _calibrationYawSamples.add(yawAngle);
+            _calibrationNoseYSamples.add(dy);
+            _calibrationFrameCount++;
 
-          final rawRightPercent = (dx > 0) ? ((dx / (screenWidth * 0.25)) * 100).clamp(0, 100).toInt() : 0;
-          final rawLeftPercent = (dx < 0) ? ((dx.abs() / (screenWidth * 0.25)) * 100).clamp(0, 100).toInt() : 0;
-          final rawUpPercent = (dy < 0) ? ((dy.abs() / (screenHeight * 0.25)) * 100).clamp(0, 100).toInt() : 0;
-          final rawDownPercent = (dy > 0) ? ((dy / (screenHeight * 0.25)) * 100).clamp(0, 100).toInt() : 0;
+            setState(() {
+              _status = "Kalibrasi $_calibrationFrameCount/$CALIBRATION_FRAMES...";
+            });
 
-          _rightHistory.add(rawRightPercent);
-          _leftHistory.add(rawLeftPercent);
-          _upHistory.add(rawUpPercent);
-          _downHistory.add(rawDownPercent);
-
-          if (_rightHistory.length > SMOOTHING_FRAMES) _rightHistory.removeFirst();
-          if (_leftHistory.length > SMOOTHING_FRAMES) _leftHistory.removeFirst();
-          if (_upHistory.length > SMOOTHING_FRAMES) _upHistory.removeFirst();
-          if (_downHistory.length > SMOOTHING_FRAMES) _downHistory.removeFirst();
-
-          final smoothRight = _rightHistory.isEmpty ? 0 : (_rightHistory.reduce((a, b) => a + b) / _rightHistory.length).round();
-          final smoothLeft = _leftHistory.isEmpty ? 0 : (_leftHistory.reduce((a, b) => a + b) / _leftHistory.length).round();
-          final smoothUp = _upHistory.isEmpty ? 0 : (_upHistory.reduce((a, b) => a + b) / _upHistory.length).round();
-          final smoothDown = _downHistory.isEmpty ? 0 : (_downHistory.reduce((a, b) => a + b) / _downHistory.length).round();
-
-          _turnRightPercent = smoothRight > DEADZONE_THRESHOLD ? smoothRight : 0;
-          _turnLeftPercent = smoothLeft > DEADZONE_THRESHOLD ? smoothLeft : 0;
-          _nodUpPercent = smoothUp > DEADZONE_THRESHOLD ? smoothUp : 0;
-          _nodDownPercent = smoothDown > DEADZONE_THRESHOLD ? smoothDown : 0;
-
-          // Kirim data ke ESP jika terhubung
-          if (_isConnected) {
-            String dataToSend = 
-              '{"kanan": $_turnRightPercent, "kiri": $_turnLeftPercent, "atas": $_nodUpPercent, "bawah": $_nodDownPercent}';
-            _channel.sink.add(dataToSend);
+            if (_calibrationFrameCount >= CALIBRATION_FRAMES) {
+              _finishCalibration();
+            }
           }
+          // === MODE NORMAL: Hitung gerakan relatif terhadap kalibrasi ===
+          else if (_isCalibrated) {
+            final screenHeight = image.height.toDouble();
 
-          setState(() {});
+            // HITUNG PERUBAHAN RELATIF TERHADAP POSISI KALIBRASI
+            final double relativeYaw = yawAngle - _calibratedYaw;
+            final double relativeDy = dy - _calibratedNoseY;
+
+            // --- PENGHITUNGAN PERSENTASE GELENG (KANAN/KIRI) ---
+            final rawRightPercent = (relativeYaw > 0) 
+                ? ((relativeYaw / MAX_YAW_DEGREE) * 100).clamp(0, 100).toInt() 
+                : 0;
+            
+            final rawLeftPercent = (relativeYaw < 0) 
+                ? ((relativeYaw.abs() / MAX_YAW_DEGREE) * 100).clamp(0, 100).toInt() 
+                : 0;
+
+            // --- PENGHITUNGAN PERSENTASE ANGGUK (ATAS/BAWAH) ---
+            final rawUpPercent = (relativeDy < 0) 
+                ? ((relativeDy.abs() / (screenHeight * VERTICAL_SCALE_FACTOR)) * 100).clamp(0, 100).toInt() 
+                : 0;
+                
+            final rawDownPercent = (relativeDy > 0) 
+                ? ((relativeDy / (screenHeight * VERTICAL_SCALE_FACTOR)) * 100).clamp(0, 100).toInt() 
+                : 0;
+
+            // --- Smoothing ---
+            _rightHistory.add(rawRightPercent);
+            _leftHistory.add(rawLeftPercent);
+            _upHistory.add(rawUpPercent);
+            _downHistory.add(rawDownPercent);
+
+            if (_rightHistory.length > SMOOTHING_FRAMES) _rightHistory.removeFirst();
+            if (_leftHistory.length > SMOOTHING_FRAMES) _leftHistory.removeFirst();
+            if (_upHistory.length > SMOOTHING_FRAMES) _upHistory.removeFirst();
+            if (_downHistory.length > SMOOTHING_FRAMES) _downHistory.removeFirst();
+
+            final smoothRight = _rightHistory.isEmpty ? 0 : (_rightHistory.reduce((a, b) => a + b) / _rightHistory.length).round();
+            final smoothLeft = _leftHistory.isEmpty ? 0 : (_leftHistory.reduce((a, b) => a + b) / _leftHistory.length).round();
+            final smoothUp = _upHistory.isEmpty ? 0 : (_upHistory.reduce((a, b) => a + b) / _upHistory.length).round();
+            final smoothDown = _downHistory.isEmpty ? 0 : (_downHistory.reduce((a, b) => a + b) / _downHistory.length).round();
+
+            _turnRightPercent = smoothRight > DEADZONE_THRESHOLD ? smoothRight : 0;
+            _turnLeftPercent = smoothLeft > DEADZONE_THRESHOLD ? smoothLeft : 0;
+            _nodUpPercent = smoothUp > DEADZONE_THRESHOLD ? smoothUp : 0;
+            _nodDownPercent = smoothDown > DEADZONE_THRESHOLD ? smoothDown : 0;
+
+            // Kirim data ke ESP jika terhubung
+            if (_isConnected) {
+              String dataToSend = 
+                '{"kanan": $_turnRightPercent, "kiri": $_turnLeftPercent, "atas": $_nodUpPercent, "bawah": $_nodDownPercent}';
+              _channel.sink.add(dataToSend);
+            }
+
+            setState(() {});
+          }
         }
       } else if (mounted) {
         setState(() {
-          _status = _isCalibrated ? "Wajah tidak terdeteksi" : "Posisikan wajah di dalam area";
+          _status = _isCalibrating 
+              ? "Posisikan wajah untuk kalibrasi" 
+              : (_isCalibrated ? "Wajah tidak terdeteksi" : "Posisikan wajah di dalam area");
         });
       }
     } catch (e) {
       debugPrint("Error di _processCameraImage: $e");
+      stopwatch.stop();
+      _processingTimeMs = stopwatch.elapsedMilliseconds; 
+      setState(() {});
     }
 
     _isProcessing = false;
@@ -304,6 +379,8 @@ class _CameraScreenState extends State<CameraScreen> {
       statusColor = Colors.green.withOpacity(0.8);
     } else if (_isCalibrated && !_isConnected) {
       statusColor = Colors.orange.withOpacity(0.8);
+    } else if (_isCalibrating) {
+      statusColor = Colors.purple.withOpacity(0.8);
     }
 
     return Scaffold(
@@ -315,11 +392,6 @@ class _CameraScreenState extends State<CameraScreen> {
             onPressed: _switchCamera,
             tooltip: 'Ganti Kamera',
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _resetCalibration,
-            tooltip: 'Reset Kalibrasi',
-          ),
         ],
       ),
       body: _isCameraInitialized
@@ -327,6 +399,7 @@ class _CameraScreenState extends State<CameraScreen> {
               fit: StackFit.expand,
               children: [
                 CameraPreview(_cameraController),
+                
                 if (_status.isNotEmpty)
                   Positioned(
                     top: 50,
@@ -348,29 +421,39 @@ class _CameraScreenState extends State<CameraScreen> {
                       ),
                     ),
                   ),
+
                 if (_isCalibrated)
                   Positioned(
-                    bottom: 20,
+                    bottom: 80, 
                     left: 20,
                     right: 20,
                     child: Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.6),
+                        color: Colors.black.withOpacity(0.7),
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            "Kanan: $_turnRightPercent%   Kiri: $_turnLeftPercent%",
+                            "Frame Time: $_processingTimeMs ms",
+                            style: const TextStyle(
+                                color: Colors.cyanAccent, 
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            "Geleng Kanan: $_turnRightPercent%   Geleng Kiri: $_turnLeftPercent%",
                             style: const TextStyle(
                                 color: Colors.yellow, fontSize: 16),
                             textAlign: TextAlign.center,
                           ),
                           const SizedBox(height: 5),
                           Text(
-                            "Atas: $_nodUpPercent%   Bawah: $_nodDownPercent%",
+                            "Angguk Atas: $_nodUpPercent%   Angguk Bawah: $_nodDownPercent%",
                             style: const TextStyle(
                                 color: Colors.yellow, fontSize: 16),
                             textAlign: TextAlign.center,
@@ -379,15 +462,35 @@ class _CameraScreenState extends State<CameraScreen> {
                       ),
                     ),
                   ),
+
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: ElevatedButton.icon( 
+                      onPressed: (_isCalibrated || _isCalibrating) ? _resetCalibration : _startCalibration,
+                      icon: Icon((_isCalibrated || _isCalibrating) ? Icons.refresh : Icons.sensors),
+                      label: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                        child: Text(
+                          (_isCalibrated || _isCalibrating) ? 'RESET KALIBRASI' : 'KALIBRASI & SAMBUNGKAN',
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: (_isCalibrated || _isCalibrating) ? Colors.red.shade700 : Theme.of(context).primaryColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        elevation: 5,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             )
           : const Center(child: CircularProgressIndicator()),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _isCalibrated ? _resetCalibration : _startCalibration,
-        label: Text(_isCalibrated ? 'Reset' : 'Kalibrasi & Sambungkan'),
-        icon: Icon(_isCalibrated ? Icons.refresh : Icons.sensors),
-        backgroundColor: _isCalibrated ? Colors.red : Theme.of(context).primaryColor,
-      ),
     );
   }
 }
