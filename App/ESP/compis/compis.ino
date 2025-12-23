@@ -2,32 +2,29 @@
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 
-// ==========================================================
-// ===             PENETAPAN PIN GPIO UNTUK LED/AKTUATOR             ===
-// ==========================================================
-// Ubah angka pin (contoh: 2, 4, 16, 17) sesuai dengan rangkaian fisik Anda.
-const int PIN_ANGGUK_ATAS = 2; // Contoh: GPIO 2
-const int PIN_ANGGUK_BAWAH = 4; // Contoh: GPIO 4
-const int PIN_GELENG_KANAN = 16; // Contoh: GPIO 16
-const int PIN_GELENG_KIRI = 17; // Contoh: GPIO 17
+// GPIO Pin Configuration
+const int PIN_NOD_UP = 2;
+const int PIN_NOD_DOWN = 4;
+const int PIN_TURN_RIGHT = 16;
+const int PIN_TURN_LEFT = 17;
 
-// --- Variabel Global untuk menyimpan data terakhir dari Flutter ---
-volatile int latestAtas = 0; // Angguk Atas
-volatile int latestBawah = 0; // Angguk Bawah
-volatile int latestKanan = 0; // Geleng Kanan
-volatile int latestKiri = 0; // Geleng Kiri
+// Movement data from Flutter app
+volatile int latestUp = 0;
+volatile int latestDown = 0;
+volatile int latestRight = 0;
+volatile int latestLeft = 0;
 
-// --- Variabel untuk Timer (menggunakan millis()) ---
-unsigned long lastPrintTimeAtas = 0;
-unsigned long lastPrintTimeBawah = 0;
-unsigned long lastPrintTimeKanan = 0;
-unsigned long lastPrintTimeKiri = 0;
-const long printInterval = 500; // Interval 0.5 detik (500 milidetik)
+// Serial print timing control
+unsigned long lastPrintUp = 0;
+unsigned long lastPrintDown = 0;
+unsigned long lastPrintRight = 0;
+unsigned long lastPrintLeft = 0;
+const long PRINT_INTERVAL = 500;
 
-// --- AMBANG BATAS DETEKSI ---
-const int AMBANG_BATAS = 7;
+// Detection threshold
+const int THRESHOLD = 7;
 
-// --- PENGATURAN HOTSPOT ---
+// WiFi Access Point credentials
 const char* ssid = "ESP32-FaceController_kelompok2";
 const char* password = "password123";
 
@@ -35,19 +32,19 @@ WebSocketsServer webSocket = WebSocketsServer(81);
 
 void onWebSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
   if (type == WStype_TEXT) {
-    DynamicJsonDocument doc(1024); 
+    DynamicJsonDocument doc(1024);
     DeserializationError error = deserializeJson(doc, payload);
 
     if (error) {
-      Serial.print(F("deserializeJson() failed: "));
+      Serial.print(F("JSON parse error: "));
       Serial.println(error.f_str());
       return;
     }
 
-    latestAtas = doc["atas"] | 0; 
-    latestBawah = doc["bawah"] | 0; 
-    latestKanan = doc["kanan"] | 0; 
-    latestKiri = doc["kiri"] | 0; 
+    latestUp = doc["atas"] | 0;
+    latestDown = doc["bawah"] | 0;
+    latestRight = doc["kanan"] | 0;
+    latestLeft = doc["kiri"] | 0;
   }
 }
 
@@ -55,78 +52,80 @@ void setup() {
   Serial.begin(115200);
   Serial.println();
   
-  // ==========================================================
-  // ===             INISIALISASI PIN SEBAGAI OUTPUT             ===
-  // ==========================================================
-  pinMode(PIN_ANGGUK_ATAS, OUTPUT);
-  pinMode(PIN_ANGGUK_BAWAH, OUTPUT);
-  pinMode(PIN_GELENG_KANAN, OUTPUT);
-  pinMode(PIN_GELENG_KIRI, OUTPUT);
+  // Initialize GPIO pins as outputs
+  pinMode(PIN_NOD_UP, OUTPUT);
+  pinMode(PIN_NOD_DOWN, OUTPUT);
+  pinMode(PIN_TURN_RIGHT, OUTPUT);
+  pinMode(PIN_TURN_LEFT, OUTPUT);
 
-  // Pastikan semua LED/aktuator mati saat startup
-  digitalWrite(PIN_ANGGUK_ATAS, LOW);
-  digitalWrite(PIN_ANGGUK_BAWAH, LOW);
-  digitalWrite(PIN_GELENG_KANAN, LOW);
-  digitalWrite(PIN_GELENG_KIRI, LOW);
+  // Turn off all LEDs at startup
+  digitalWrite(PIN_NOD_UP, LOW);
+  digitalWrite(PIN_NOD_DOWN, LOW);
+  digitalWrite(PIN_TURN_RIGHT, LOW);
+  digitalWrite(PIN_TURN_LEFT, LOW);
 
-  // Inisialisasi WiFi dan WebSocket Server
-  Serial.println("Configuring access point...");
+  // Start WiFi Access Point
+  Serial.println("Starting WiFi AP...");
   WiFi.softAP(ssid, password);
-  IPAddress myIP = WiFi.softAPIP(); 
-  Serial.print("AP IP address: ");
-  Serial.println(myIP);
+  IPAddress ip = WiFi.softAPIP();
+  Serial.print("AP IP: ");
+  Serial.println(ip);
+  
+  // Start WebSocket server
   webSocket.begin();
   webSocket.onEvent(onWebSocketEvent);
-  Serial.println("WebSocket server started. Waiting for Flutter client...");
+  Serial.println("WebSocket server ready");
 }
 
 void loop() {
   webSocket.loop();
-  unsigned long currentTime = millis();
+  unsigned long now = millis();
 
-  // --- LOGIKA KONTROL/AKSI ---
-
-  // 1. Angguk Atas
-  if (latestAtas > AMBANG_BATAS) {
-    digitalWrite(PIN_ANGGUK_ATAS, HIGH); // NYALAKAN LED/Aktuator
-    if (currentTime - lastPrintTimeAtas >= printInterval) {
-      Serial.print("✅ ANGGUK ATAS: "); Serial.println(latestAtas); 
-      lastPrintTimeAtas = currentTime; 
+  // Nod Up
+  if (latestUp > THRESHOLD) {
+    digitalWrite(PIN_NOD_UP, HIGH);
+    if (now - lastPrintUp >= PRINT_INTERVAL) {
+      Serial.print("Nod Up: ");
+      Serial.println(latestUp);
+      lastPrintUp = now;
     }
   } else {
-    digitalWrite(PIN_ANGGUK_ATAS, LOW); // MATIKAN jika di bawah ambang batas
+    digitalWrite(PIN_NOD_UP, LOW);
   }
 
-  // 2. Angguk Bawah
-  if (latestBawah > AMBANG_BATAS) {
-    digitalWrite(PIN_ANGGUK_BAWAH, HIGH); // NYALAKAN LED/Aktuator
-    if (currentTime - lastPrintTimeBawah >= printInterval) {
-      Serial.print("✅ ANGGUK BAWAH: "); Serial.println(latestBawah);
-      lastPrintTimeBawah = currentTime;
+  // Nod Down
+  if (latestDown > THRESHOLD) {
+    digitalWrite(PIN_NOD_DOWN, HIGH);
+    if (now - lastPrintDown >= PRINT_INTERVAL) {
+      Serial.print("Nod Down: ");
+      Serial.println(latestDown);
+      lastPrintDown = now;
     }
   } else {
-    digitalWrite(PIN_ANGGUK_BAWAH, LOW); // MATIKAN
+    digitalWrite(PIN_NOD_DOWN, LOW);
   }
 
-  // 3. Geleng Kanan
-  if (latestKanan > AMBANG_BATAS) {
-    digitalWrite(PIN_GELENG_KANAN, HIGH); // NYALAKAN LED/Aktuator
-    if (currentTime - lastPrintTimeKanan >= printInterval) {
-      Serial.print("➡️ GELENG KANAN: "); Serial.println(latestKanan); 
-      lastPrintTimeKanan = currentTime;
+  // Turn Right
+  if (latestRight > THRESHOLD) {
+    digitalWrite(PIN_TURN_RIGHT, HIGH);
+    if (now - lastPrintRight >= PRINT_INTERVAL) {
+      Serial.print("Turn Right: ");
+      Serial.println(latestRight);
+      lastPrintRight = now;
     }
   } else {
-    digitalWrite(PIN_GELENG_KANAN, LOW); // MATIKAN
+    digitalWrite(PIN_TURN_RIGHT, LOW);
   }
 
-  // 4. Geleng Kiri
-  if (latestKiri > AMBANG_BATAS) {
-    digitalWrite(PIN_GELENG_KIRI, HIGH); // NYALAKAN LED/Aktuator
-    if (currentTime - lastPrintTimeKiri >= printInterval) {
-      Serial.print("⬅️ GELENG KIRI: "); Serial.println(latestKiri); 
-      lastPrintTimeKiri = currentTime;
+  // Turn Left
+  if (latestLeft > THRESHOLD) {
+    digitalWrite(PIN_TURN_LEFT, HIGH);
+    if (now - lastPrintLeft >= PRINT_INTERVAL) {
+      Serial.print("Turn Left: ");
+      Serial.println(latestLeft);
+      lastPrintLeft = now;
     }
   } else {
-    digitalWrite(PIN_GELENG_KIRI, LOW); // MATIKAN
+    digitalWrite(PIN_TURN_LEFT, LOW);
   }
 }

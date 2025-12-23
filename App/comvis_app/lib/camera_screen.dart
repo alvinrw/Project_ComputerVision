@@ -16,49 +16,49 @@ class CameraScreen extends StatefulWidget {
 }
 
 class _CameraScreenState extends State<CameraScreen> {
-  // --- KONFIGURASI ---
+  // Configuration
   static const int SMOOTHING_FRAMES = 7;
   static const int DEADZONE_THRESHOLD = 4;
-  static const double MAX_YAW_DEGREE = 35.0; 
+  static const double MAX_YAW_DEGREE = 35.0;
   static const double VERTICAL_SCALE_FACTOR = 0.25;
-  static const int CALIBRATION_FRAMES = 10; // Jumlah frame untuk kalibrasi
+  static const int CALIBRATION_FRAMES = 10;
 
-  // --- Variabel WebSocket ---
+  // WebSocket connection
   late WebSocketChannel _channel;
   bool _isConnected = false;
 
-  // --- Variabel Kamera & Deteksi ---
+  // Camera and face detection
   late CameraController _cameraController;
   bool _isCameraInitialized = false;
   late FaceDetector _faceDetector;
   bool _isProcessing = false;
   late int _selectedCameraIndex;
 
-  // --- Variabel Kalibrasi ---
+  // Calibration state
   bool _isCalibrated = false;
-  bool _isCalibrating = false; // Status sedang kalibrasi
+  bool _isCalibrating = false;
   int _calibrationFrameCount = 0;
   
-  // NILAI REFERENSI KALIBRASI (posisi netral user)
+  // Calibration reference values (neutral position)
   double _calibratedYaw = 0.0;
   double _calibratedNoseY = 0.0;
   
-  // Untuk mengumpulkan data saat kalibrasi
+  // Calibration sample collection
   final List<double> _calibrationYawSamples = [];
   final List<double> _calibrationNoseYSamples = [];
 
-  // --- Variabel untuk Smoothing ---
+  // Smoothing queues
   final Queue<int> _rightHistory = Queue<int>();
   final Queue<int> _leftHistory = Queue<int>();
   final Queue<int> _upHistory = Queue<int>();
   final Queue<int> _downHistory = Queue<int>();
 
-  // --- Variabel untuk Tampilan ---
+  // Display values
   int _turnRightPercent = 0;
   int _turnLeftPercent = 0;
   int _nodUpPercent = 0;
   int _nodDownPercent = 0;
-  String _status = "Hubungkan WiFi ke ESP & tekan tombol kalibrasi";
+  String _status = "Connect to ESP WiFi and press calibrate";
   int _processingTimeMs = 0;
 
   void _connectToESP() {

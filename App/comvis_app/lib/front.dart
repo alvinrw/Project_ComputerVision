@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:camera/camera.dart'; // [PERUBAHAN 1A] Tambahkan import ini
-import 'camera_screen.dart';      // [PERUBAHAN 1B] Dan import ini
+import 'package:camera/camera.dart';
+import 'camera_screen.dart';
 
 class ProjectExplanationScreen extends StatefulWidget {
-  // [PERUBAHAN 2] Buat widget ini bisa menerima daftar kamera
   final List<CameraDescription> cameras;
   const ProjectExplanationScreen({super.key, required this.cameras});
 
@@ -51,11 +50,6 @@ class _ProjectExplanationScreenState extends State<ProjectExplanationScreen>
         backgroundColor: Colors.white,
         elevation: 2,
         shadowColor: primaryGold.withOpacity(0.3),
-        // Menghapus tombol back karena ini halaman awal setelah main.dart
-        // leading: IconButton(
-        //   onPressed: () => Navigator.pop(context),
-        //   icon: Icon(Icons.arrow_back, color: darkText),
-        // ),
         title: Text(
           'Comvis Project',
           style: TextStyle(
@@ -171,12 +165,10 @@ class _ProjectExplanationScreenState extends State<ProjectExplanationScreen>
                         elevation: 0,
                       ),
                       icon: const Icon(Icons.videocam, size: 28),
-                      // [PERUBAHAN 3] Ganti aksi onPressed
                       onPressed: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            // Kirim data kamera ke CameraScreen
                             builder: (context) => CameraScreen(cameras: widget.cameras),
                           ),
                         );

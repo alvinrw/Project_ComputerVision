@@ -2,20 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'front.dart';
 
-// Ubah main() menjadi async untuk menunggu daftar kamera
 Future<void> main() async {
-  // Pastikan Flutter siap sebelum menjalankan kode async
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Ambil daftar kamera yang tersedia di perangkat
   final cameras = await availableCameras();
-
-  // Kirim daftar kamera ke MyApp saat aplikasi dijalankan
   runApp(MyApp(cameras: cameras));
 }
 
 class MyApp extends StatelessWidget {
-  // Tambahkan variabel untuk menampung daftar kamera
   final List<CameraDescription> cameras;
 
   const MyApp({super.key, required this.cameras});
@@ -25,14 +18,12 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Comvis Project',
-      // Kirim daftar kamera ke HomeScreen
       home: HomeScreen(cameras: cameras),
     );
   }
 }
 
 class HomeScreen extends StatefulWidget {
-  // Tambahkan variabel untuk menampung daftar kamera
   final List<CameraDescription> cameras;
 
   const HomeScreen({super.key, required this.cameras});
